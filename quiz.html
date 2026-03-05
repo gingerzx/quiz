@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0c0c0e; --surface: #13131a; --surface2: #1c1c27; --border: #2a2a3a;
+    --green: #22c55e; --green-dim: #16a34a33; --text: #e8e8f0; --text-dim: #6b6b80;
+    --accent: #a78bfa; --accent-dim: #a78bfa22; --wrong: #ef4444; --wrong-dim: #ef444422;
+  }
+  body {
+    background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 20px; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 20% 20%, #1a1a2e 0%, transparent 60%),
+                radial-gradient(ellipse 40% 40% at 80% 80%, #0d1117 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+  .app { position: relative; z-index: 1; width: 100%; max-width: 700px; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .logo { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 0.15em; text-transform: uppercase; }
+  .counter { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--green); }
+
+  .progress-wrap { margin-bottom: 36px; }
+  .progress-meta { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .progress-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.12em; }
+  .progress-pct   { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--green); }
+  .progress-track { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-fill  { height: 100%; background: linear-gradient(90deg,#16a34a,#22c55e,#4ade80); border-radius: 2px; transition: width .6s cubic-bezier(.4,0,.2,1); position: relative; }
+  .progress-fill::after { content:''; position:absolute; right:0; top:-3px; width:10px; height:10px; background:#4ade80; border-radius:50%; box-shadow:0 0 8px #4ade80; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px; position: relative; overflow: hidden; }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background: linear-gradient(90deg,transparent,var(--accent)33,transparent); }
+
+  .question-num  { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--accent); letter-spacing:.15em; text-transform:uppercase; margin-bottom:14px; }
+  .question-text { font-size:20px; font-weight:700; line-height:1.4; color:var(--text); margin-bottom:22px; }
+
+  .type-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:18px; }
+  .type-badge.single  { background:var(--green-dim);  border:1px solid var(--green)44;  color:var(--green); }
+  .type-badge.multi   { background:var(--accent-dim); border:1px solid var(--accent)44; color:var(--accent); }
+  .type-badge.imgtype { background:#f59e0b22;          border:1px solid #f59e0b44;       color:#f59e0b; }
+
+  .question-image { width:100%; max-height:300px; object-fit:contain; border-radius:10px; border:1px solid var(--border); margin-bottom:22px; display:block; background:var(--surface2); }
+
+  .options { display:grid; gap:10px; }
+  .option {
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    padding:15px 18px; cursor:pointer; display:flex; align-items:center; gap:14px;
+    transition:all .18s ease; font-size:15px; font-weight:500; color:var(--text);
+    text-align:left; width:100%;
+  }
+  .option:hover:not(.disabled) { border-color:var(--accent)55; transform:translateX(3px); }
+  .option:hover:not(.disabled) .opt-icon { background:var(--accent)33; border-color:var(--accent)66; color:var(--accent); }
+  .opt-icon {
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:500;
+    color:var(--text-dim); flex-shrink:0; transition:all .18s;
+  }
+  .multi-mode .opt-icon { border-radius:5px; }
+
+  .option.selected               { border-color:var(--accent)88; background:var(--accent-dim); }
+  .option.selected .opt-icon     { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .option.correct                { border-color:var(--green); background:var(--green-dim); }
+  .option.correct .opt-icon      { background:var(--green); border-color:var(--green); color:#000; }
+  .option.wrong                  { border-color:var(--wrong); background:var(--wrong-dim); }
+  .option.wrong .opt-icon        { background:var(--wrong); border-color:var(--wrong); color:#fff; }
+  .option.missed                 { border-color:var(--green)55; background:var(--green-dim); opacity:.7; }
+  .option.missed .opt-icon       { border-color:var(--green); color:var(--green); }
+  .option.disabled               { cursor:default; pointer-events:none; }
+
+  .submit-btn {
+    margin-top:18px; width:100%; padding:14px; background:var(--accent); color:#fff;
+    border:none; border-radius:10px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700;
+    cursor:pointer; transition:all .2s ease; display:none; letter-spacing:.03em;
+  }
+  .submit-btn:hover:not(:disabled) { background:#c4b5fd; color:#1a1a2e; transform:translateY(-1px); box-shadow:0 6px 20px #a78bfa33; }
+  .submit-btn:disabled { opacity:.4; cursor:default; }
+
+  .feedback { margin-top:16px; padding:11px 16px; border-radius:8px; font-size:13px; font-family:'JetBrains Mono',monospace; display:none; align-items:center; gap:8px; }
+  .feedback.show    { display:flex; animation:fadeIn .3s ease; }
+  .feedback.ok      { background:var(--green-dim);  border:1px solid var(--green)44;  color:var(--green); }
+  .feedback.bad     { background:var(--wrong-dim);  border:1px solid var(--wrong)44;  color:var(--wrong); }
+  .feedback.partial { background:#f59e0b22;          border:1px solid #f59e0b44;       color:#f59e0b; }
+
+  .next-btn { margin-top:20px; width:100%; padding:15px; background:var(--green); color:#000; border:none; border-radius:10px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s ease; display:none; letter-spacing:.03em; }
+  .next-btn:hover { background:#4ade80; transform:translateY(-1px); box-shadow:0 6px 24px #22c55e33; }
+  .next-btn.show { display:block; animation:fadeIn .3s ease; }
+
+  .card.slide-out { animation:slideOut .32s cubic-bezier(.4,0,1,1) forwards; }
+  .card.slide-in  { animation:slideIn  .38s cubic-bezier(0,0,.2,1) forwards; }
+  @keyframes slideOut { to { transform:translateX(-48px); opacity:0; } }
+  @keyframes slideIn  { from { transform:translateX(48px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+  @keyframes fadeIn   { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+  .results { text-align:center; animation:fadeIn .6s ease forwards; }
+  .score-ring { width:140px; height:140px; margin:0 auto 28px; position:relative; }
+  .score-ring svg { transform:rotate(-90deg); }
+  .ring-bg   { fill:none; stroke:var(--surface2); stroke-width:8; }
+  .ring-fill { fill:none; stroke:var(--green); stroke-width:8; stroke-linecap:round; stroke-dasharray:339.3; stroke-dashoffset:339.3; filter:drop-shadow(0 0 6px var(--green)); transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1) .3s; }
+  .score-num   { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .score-big   { font-size:38px; font-weight:800; color:var(--text); line-height:1; }
+  .score-total { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-dim); margin-top:4px; }
+  .grade-badge { display:inline-block; padding:7px 22px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:20px; font-family:'JetBrains Mono',monospace; }
+  .grade-badge.mukemmel  { background:#22c55e22; border:1px solid #22c55e66; color:#22c55e; }
+  .grade-badge.cok-iyi   { background:#3b82f622; border:1px solid #3b82f666; color:#60a5fa; }
+  .grade-badge.iyi       { background:#a78bfa22; border:1px solid #a78bfa66; color:#a78bfa; }
+  .grade-badge.orta      { background:#f59e0b22; border:1px solid #f59e0b66; color:#f59e0b; }
+  .grade-badge.zayif     { background:#ef444422; border:1px solid #ef444466; color:#ef4444; }
+  .grade-msg { font-size:26px; font-weight:800; margin-bottom:8px; color:var(--text); }
+  .grade-sub { font-size:14px; color:var(--text-dim); margin-bottom:32px; line-height:1.6; }
+  .stats-row { display:flex; gap:12px; margin-bottom:32px; }
+  .stat-box  { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .stat-val  { font-size:24px; font-weight:800; margin-bottom:4px; }
+  .stat-val.green  { color:var(--green); }
+  .stat-val.red    { color:var(--wrong); }
+  .stat-val.purple { color:var(--accent); }
+  .stat-lbl { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.1em; }
+  .retry-btn { flex:1; padding:15px; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:10px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s ease; }
+  .retry-btn:hover { border-color:var(--accent)66; color:var(--accent); transform:translateY(-1px); }
+  .quit-btn  { flex:1; padding:15px; background:transparent; color:var(--text-dim); border:1px solid var(--border); border-radius:10px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s ease; }
+  .quit-btn:hover { border-color:var(--wrong)66; color:var(--wrong); transform:translateY(-1px); }
+  .end-btns  { display:flex; gap:12px; }
+
+  .audio-btn {
+  position: fixed; bottom: 20px; right: 20px; z-index: 100;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 16px; cursor: pointer;
+  transition: all .2s; display: flex; align-items: center; justify-content: center;}
+  .audio-btn:hover { border-color: var(--accent)66; color: var(--accent); }
+
+  .start-screen { text-align:center; animation:fadeIn .5s ease; }
+  .start-icon  { width: 120px; height: 120px; object-fit: cover;   border-radius: 12px; margin-bottom: 20px; }
+  .start-title { font-size:32px; font-weight:800; margin-bottom:12px; }
+  .start-sub   { color:var(--text-dim); font-size:15px; margin-bottom:16px; line-height:1.7; }
+  .type-legend { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-bottom:32px; }
+  .tl-item { display:flex; align-items:center; gap:7px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-dim); }
+  .tl-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .start-btn { width:100%; padding:18px; background:var(--green); color:#000; border:none; border-radius:10px; font-family:'Syne',sans-serif; font-size:16px; font-weight:800; cursor:pointer; transition:all .2s ease; }
+  .start-btn:hover { background:#4ade80; transform:translateY(-2px); box-shadow:0 8px 32px #22c55e33; }
+  .quiz-wrap { display:none; }
+  .quiz-wrap.show { display:block; }
+  #resultsCard { display:none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<button class="audio-btn" id="muteBtn" onclick="toggleMute()" title="Müziği aç/kapat">🔊</button>
+
+  <div class="header" id="header" style="display:none">
+    <span class="logo">// Sınav</span>
+    <span class="counter" id="counter">01 / 50</span>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap" style="display:none">
+    <div class="progress-meta">
+      <span class="progress-label">İlerleme</span>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- BAŞLANGIÇ -->
+  <div class="card" id="startCard">
+    <div class="start-screen">
+      <img src="ck.jpg" class="start-icon" alt="">
+      <div class="start-title">Amınevladı<br>Hazır mısın?</div>
+      <div class="start-sub">50 soru </div>
+      
+      <button class="start-btn" onclick="startQuiz()">Sınava Başla →</button>
+    </div>
+  </div>
+
+  <!-- SORU KARTI -->
+  <div class="card quiz-wrap" id="quizCard">
+    <div class="question-num" id="questionNum">Soru 01</div>
+    <div id="typeBadge"></div>
+    <div class="question-text" id="questionText"></div>
+    <div id="questionMedia"></div>
+    <div class="options" id="optionsContainer"></div>
+    <button class="submit-btn" id="submitBtn" onclick="submitMulti()">Cevabı Onayla</button>
+    <div class="feedback" id="feedback"></div>
+    <button class="next-btn" id="nextBtn" onclick="nextQuestion()">Sonraki Soru →</button>
+  </div>
+
+  <!-- AUDIO -->
+  <audio id="themeSong" src="theme.mp3" loop></audio>
+  <audio id="sfxPlayer"></audio>
+
+  <!-- SONUÇLAR -->
+  <div class="card" id="resultsCard">
+    <div class="results">
+      <div class="score-ring">
+        <svg width="140" height="140" viewBox="0 0 120 120">
+          <circle class="ring-bg"   cx="60" cy="60" r="54"/>
+          <circle class="ring-fill" cx="60" cy="60" r="54" id="ringFill"/>
+        </svg>
+        <div class="score-num">
+          <div class="score-big"   id="scoreBig">0</div>
+          <div class="score-total" id="scoreTotal">/ 50</div>
+        </div>
+      </div>
+      <div class="grade-badge" id="gradeBadge"></div>
+      <div class="grade-msg"   id="gradeMsg"></div>
+      <div class="grade-sub"   id="gradeSub"></div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val green"  id="statCorrect">0</div><div class="stat-lbl">Doğru</div></div>
+        <div class="stat-box"><div class="stat-val red"    id="statWrong">0</div><div class="stat-lbl">Yanlış</div></div>
+        <div class="stat-box"><div class="stat-val purple" id="statPct">0%</div><div class="stat-lbl">Puan</div></div>
+      </div>
+      <div class="end-btns">
+        <button class="retry-btn" onclick="retryQuiz()">↺ Tekrar Dene</button>
+        <button class="quit-btn"  onclick="quitApp()">✕ Çık</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+// ═══════════════════════════════
+//  AUDIO
+// ═══════════════════════════════
+let muted = false;
+
+function startTheme() {
+  const theme = document.getElementById('themeSong');
+  theme.volume = 0.4;
+  theme.play().catch(() => {});
+}
+
+function toggleMute() {
+  muted = !muted;
+  document.getElementById('themeSong').muted = muted;
+  document.getElementById('sfxPlayer').muted = muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+}
+
+function stopSfx() {
+  const sfx = document.getElementById('sfxPlayer');
+  sfx.pause();
+  sfx.currentTime = 0;
+  sfx.loop = false;
+  sfx.src = '';
+}
+
+function playSfx(src, looping) {
+  const sfx = document.getElementById('sfxPlayer');
+  sfx.src    = src;
+  sfx.loop   = looping || false;
+  sfx.volume = 0.9;
+  sfx.muted  = muted;
+  sfx.play().catch(() => {});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SORULAR
+//  type: "single" → answer: index (sayı)
+//  type: "multi"  → answer: [indexler]  (hepsi seçilmeli)
+//  type: "image"  → image: "dosyaadi.jpg"  (single veya multi)
+//  Görseller HTML ile aynı klasörde olmalı: 1.jpg, 6.jpg, 7.jpg, 9.jpg
+// ═══════════════════════════════════════════════════════════
+const questions = [
+  /* 1  */ { type:"image", image:"1.jpg", q:"?", options:["Nonni","Dog","Göt","Sik"], answer:0 },
+  /* 2  */ { type:"single", q:"Behlül'ün yapmayı en çok sevdiği şey?", options:["Jerking off","Opsiyonlamak","Opsiyonlamaya tövbe etmek","Shorts"], answer:3 },
+  /* 3  */ { type:"single", q:"Lol ne olm __.", options:["Çocuk musun","Mal mısın","Ne diyon","İşsiz misin"], answer:0 },
+  /* 4  */ { type:"single", q:"Behlül hangi sınava opsiyonel girmiştir?", options:["Analiz","Numerik","Diferansiyel Denklemler","Fransızca"], answer:2 },
+  /* 5  */ { type:"single", q:"Ben __ __ ki.", options:["oraya gelmiştim","uyuya kalmıştım","papera girmiştim","zaten ölmüştüm"], answer:3 },
+  /* 6  */ { type:"image", image:"6.jpg", q:"?", options:["Zurna","Bilir kişi","Düğün dernek","Çalgı çengi"], answer:1 },
+  /* 7  */ { type:"image", image:"7.jpg", q:"?", options:["öylemiymişaabi","oneymişkanzi","güzelmişkanka","hmmöylemiymişkanzi"], answer:3 },
+  /* 8  */ { type:"single", q:"Hangisi Berkay'da yok?", options:["Zoofobi","Pedofili","Klostrofobi","Ensest"], answer:2 },
+  /* 9  */ { type:"image", subtype:"multi", image:"9.jpg", q:"?", options:["Rafa Silva","Rafa Silva","Rafa Silva","Rafa Silva"], answer:[0,1,2,3], audioOnLoad:"r9_rafasilva.mp3" },
+  /* 10 */ { type:"single", q:"Hangi lavuğun parası yoktur?", options:["Rambo Okan","Hiko Baba","Berkay Güven","Dalyarak Adam"], answer:2 },
+  /* 11 */ { type:"single", q:"Bi rivayete göre hangi arkadaş babasının şarj aletini tamir etmesini dünyanın 1. Paleotik zamanından beridir beklemektedir?", options:["Jamal","Bakiga","Basoga","Baganda"], answer:0 },
+  /* 12 */ { type:"single", q:"Behlülün kafasında ne çalıyor?", options:["Gangsta Rap – Nigga Nigga Nigga","Sigimasigimaboy sigimaboy sigimaboy","Midone sinane","Spongebob – Gyat Chrizzmas"], answer:1, audioOnAnswer:"q12_sigmasigmaboy.mp3" },
+  /* 13 */ { type:"single", q:"Trenime bin nigga _.", options:["Sorma deliylen","Yapma kelinlen","Korkma demirden","Sokma elinlen"], answer:2, audioOnAnswer:"q13_korkmademirden.mp3" },
+  /* 14 */ { type:"single", q:"Hangisi kurtarır?", options:["Can kurtaran","Burak","Doktor","Hemşire"], answer:1 },
+  /* 15 */ { type:"single", q:"Best teknoloji?", options:["Niggatro","Jam","Ventoy","Rufus"], answer:0, audioOnAnswer:"q15_kerosene.mp3" },
+  /* 16 */ { type:"single", q:"Hangisi kemik kıkırdağı hücre çeperi tayfada bulunmayan bir isimdir?", options:["Berkay Güven","Cockscocks","Abdü","Mustafa Çağrı Atakır"], answer:3 },
+  /* 17 */ { type:"single", q:"Hangi üye inbred?", options:["Emir Güven","Berkay Güven","Yunus","Behlül"], answer:0 },
+  /* 18 */ { type:"single", q:"Best pdf reader?", options:["Adobe Hitler","Foxit Reader","Sumatra Reader","PDF-XChanger Co Ltd Şti."], answer:2 },
+  /* 19 */ { type:"single", q:"Hangisi impostor?", options:["I for Ittihad","Temmuz 2021 Çocuk Parkında Ben Olayı","Moonoverthecastle","Incident Man"], answer:1 },
+  /* 20 */ { type:"single", q:"Best araba?", options:["Porsche","Koeniggasex","Mercedes Mydick","Bayerische Motoren Werke"], answer:1 },
+  /* 21 */ { type:"single", q:"Hangisi harbici bi laf değil?", options:["Yibolski","Pasholnahui","Zıtravo","Dolbaeb"], answer:2 },
+  /* 22 */ { type:"single", q:"Ölümden başka her derde şifa olan içeceğin içinde kaç çeşit baharat vardır?", options:["58","52","56","50"], answer:2 },
+  /* 23 */ { type:"single", q:"Shaco ile nerden gidilir?", options:["Jungledan gidilir","Midden gidilir","Toptan gidilir","Bottan gidilir"], answer:3 },
+  /* 24 */ { type:"single", q:"Grubun ismi nereden gelmiştir?", options:["Mason locası","Albert Hellman","Mehmet Karahanlı","Acın Ilıcalı"], answer:1, audioOnAnswer:"q24_alberthellman.mp3" },
+  /* 25 */ { type:"single", q:"Mag-7 Insomnia?", options:["Egehan","Ege","Yunus","Behlül"], answer:1 },
+  /* 26 */ { type:"single", q:"Hangisi harcanmaz?", options:["Ele gelen büyük hamamböceği","Tren Urgot","20lik çıtır","Yeni doğmuş kedi"], answer:2 },
+  /* 27 */ { type:"single", q:"Yunus hangi oyunu 2000 saat oynamak için YKS'yi beklemiştir?", options:["Black Ops 3","World at War","Hunniepop 2","Doki Doki"], answer:2 },
+  /* 28 */ { type:"single", q:"Hangisi Burak'ın sevgilisinin adı değildir?", options:["Aşkım","Kübra","Selim","Ice Americano"], answer:0 },
+  /* 29 */ { type:"single", q:"Hangisi best ETS ilacıdır?", options:["Sanax","Prozac","Felsac","Fluoksetin"], answer:0 },
+  /* 30 */ { type:"single", q:"Neresi adamsızdır?", options:["Sokaklar","Gökyüzü","Mezarlık","Uzay"], answer:1, audioOnLoad:"q30_nms.mp3", audioOnLoadOnce:true },
+  /* 31 */ { type:"single", q:"Hangisinin referans imzası daha değerlidir?", options:["Burak Bilge","Selim Özsoy","Ronnie Coleman","Erol Tetik"], answer:3 },
+  /* 32 */ { type:"single", q:"Hangi ses farklı kategoridedir?", options:["Realms","Nani","Nms uzay gemisi sesi","Sicko mode"], answer:1, audioOnAnswer:"q32_realms.mp3" },
+  /* 33 */ { type:"single", q:"Naparlar?", options:["Tanırlar","Sikerler","Ararlar","Harcarlar"], answer:0 },
+  /* 34 */ { type:"single", q:"Kabeye yayan yürürken hayatını kaybeden adamın yürüyüşünden daha da kutsal hangi yürüyüş vardır?", options:["Divinity yürüyüş","Nigger yürüyüş","Holy yürüyüş","Hicret"], answer:2 },
+  /* 35 */ { type:"single", q:"Universal metric birim?", options:["Metre","Milimetre","Mililitre","Litre"], answer:1 },
+  /* 36 */ { type:"single", q:"Hangisi impostor?", options:["Bi tutam kızıl","Şase podye","Panayır","Zerendüt"], answer:0 },
+  /* 37 */ { type:"single", q:"Kim merak eder?", options:["Emir Güven","Ahmet Selim Özsoy","Burak Bilge","Behlül Kendirli"], answer:2 },
+  /* 38 */ { type:"single", q:"Aaaaaaaloooo?", options:["MAG 7 – Insomnia","WX-78","0.7 GPA","Ceo of Racism"], answer:2 },
+  /* 39 */ { type:"single", q:"Alllllllllllllllluuuooo?", options:["MAG 7 – Insomnia","WX-78","0.7 GPA","Ceo of Racism"], answer:3 },
+  /* 40 */ { type:"single", q:"Spotify Agency of Intelligence?", options:["Emir Güven","Yunus Emre Şahin","Burak Bilge","Ahmet Selim Özsoy"], answer:0 },
+  /* 41 */ { type:"single", q:"Bir cezalandırma biçimi?", options:["Kırbaç","Tokat","Anal penetrasyon","Three nade"], answer:3 },
+  /* 42 */ { type:"single", q:"Mesnevi yoluna kendini adamış Ahmet Selim Özsoy hocamızın tek bir bilgelik yoluna baş koymadan önce belirtmiş olduğu en hakiki mürşit hangi unsurdur?", options:["Sarışınlar","Keydrop","Arabalar","Akademi"], answer:0 },
+  /* 43 */ { type:"single", q:"Whatsup guys its..", options:["Johnny Brick","Ricky Solid","Quandale Dingle","Bobby Dangle"], answer:2, audioOnAnswer:"q43_quandaledingle.mp3" },
+  /* 44 */ { type:"single", q:"Yunus hangi silahla sona kalmaya bayılır?", options:["M4A1","Negev","AWP","Deagle"], answer:2 },
+  /* 45 */ { type:"single", q:"Hangi shitty uygulamayı Somms™ yapmamıştır?", options:["Extractor","Soma Calc","Ready for sex?","Somms Tracker"], answer:2, audioOnLoad:"q45_sommssex.mp3" },
+  /* 46 */ { type:"single", q:"En masraf ETS modu?", options:["Promods","Kögel Cargo","JBL Graphics","Convoy Mod Support"], answer:1 },
+  /* 47 */ { type:"single", q:"Rapeleme hiyerarşisinde hangi unsur kaç kere ve ne zaman rapelenir?", options:["Sister 1, Family 2, Jesus kahvaltıda","Sister 2, Family 2, Jesus kahvaltıda","Sister 2, Family 3, Jesus tatlı niyetine","Sister 2, Family 3, Jesus akşam yemeğinde"], answer:2, audioOnLoad:"q47_irapeyourwholefamilia.mp3" },
+  /* 48 */ { type:"single", q:"Hangi ev best?", options:["Jam evi","Köy evi","Öğrenci evi","Aile evi"], answer:0 },
+  /* 49 */ { type:"single", q:"Yunusun acılı salçası meşhur köyden ithal ettiği item nedir?", options:["Acılı salça","Yaren cimcik","Eli nasırlı ölmek üzere olan teyze","Jahrein"], answer:1 },
+  /* 50 */ { type:"single", q:"Doğru yol hangisi?", options:["Epstein kill niggers","Epstein fuck niggers","Epstein love niggers","Epstein rape niggers"], answer:3, audioOnAnswer:"q50_ern.mp3" },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+let current = 0, score = 0, answered = false;
+let selectedMulti = new Set();
+
+function effectiveType(q) {
+  if (q.type === 'image' && q.subtype === 'multi') return 'multi';
+  if (q.type === 'multi') return 'multi';
+  return 'single';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BAŞLAT
+// ═══════════════════════════════════════════════════════════
+function startQuiz() {
+  startTheme();
+  document.getElementById('startCard').style.display = 'none';
+  document.getElementById('header').style.display = 'flex';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('quizCard').classList.add('show');
+  loadQuestion();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SORU YÜKLE
+// ═══════════════════════════════════════════════════════════
+function loadQuestion() {
+  answered = false;
+  selectedMulti.clear();
+
+  const q = questions[current];
+  const etype = effectiveType(q);
+  const letters = ['A','B','C','D','E'];
+
+  document.getElementById('questionNum').textContent = `Soru ${String(current+1).padStart(2,'0')}`;
+  document.getElementById('counter').textContent = `${String(current+1).padStart(2,'0')} / ${questions.length}`;
+
+  const pct = Math.round((current / questions.length) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+
+  // Rozet
+  const badgeEl = document.getElementById('typeBadge');
+  if (q.type === 'image' && etype === 'multi') {
+    badgeEl.innerHTML = `<div class="type-badge imgtype">📷 Görsel &nbsp;·&nbsp; Tümünü seç</div>`;
+  } else if (q.type === 'image') {
+    badgeEl.innerHTML = `<div class="type-badge imgtype">📷 Görsel Soru</div>`;
+  } else if (etype === 'multi') {
+    badgeEl.innerHTML = `<div class="type-badge multi">☑ Tümünü seç</div>`;
+  } else {
+    badgeEl.innerHTML = `<div class="type-badge single">◉ Tek cevap</div>`;
+  }
+
+  document.getElementById('questionText').textContent = q.q || '';
+
+  // Görsel
+  const mediaEl = document.getElementById('questionMedia');
+  if (q.image) {
+    mediaEl.innerHTML = `<img src="${q.image}" class="question-image" alt="Soru görseli">`;
+  } else {
+    mediaEl.innerHTML = '';
+  }
+
+  // Seçenekler
+  const container = document.getElementById('optionsContainer');
+  container.innerHTML = '';
+  container.className = etype === 'multi' ? 'options multi-mode' : 'options';
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option';
+    btn.dataset.index = i;
+    btn.innerHTML = `<span class="opt-icon">${letters[i]}</span>${opt}`;
+    btn.onclick = etype === 'multi' ? () => toggleMulti(i, btn) : () => selectSingle(i, btn);
+    container.appendChild(btn);
+  });
+
+  const sub = document.getElementById('submitBtn');
+  sub.style.display = 'none';
+  sub.disabled = true;
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('nextBtn').className = 'next-btn';
+
+  const card = document.getElementById('quizCard');
+  card.classList.remove('slide-out');
+  void card.offsetWidth;
+  card.classList.add('slide-in');
+  setTimeout(() => card.classList.remove('slide-in'), 400);
+
+  stopSfx();
+  if (q.audioOnLoad) setTimeout(() => playSfx(q.audioOnLoad, !q.audioOnLoadOnce), 400);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TEK CEVAP
+// ═══════════════════════════════════════════════════════════
+function selectSingle(idx, btn) {
+  if (answered) return;
+  answered = true;
+  const q = questions[current];
+  const all = document.querySelectorAll('.option');
+  all.forEach(o => o.classList.add('disabled'));
+  const fb = document.getElementById('feedback');
+  stopSfx();
+  if (questions[current].audioOnAnswer) setTimeout(() => playSfx(questions[current].audioOnAnswer, false), 50);
+  if (idx === q.answer) {
+    score++;
+    btn.classList.add('correct');
+    fb.className = 'feedback ok show';
+    fb.textContent = '✓ Doğru!';
+  } else {
+    btn.classList.add('wrong');
+    all[q.answer].classList.add('correct');
+    fb.className = 'feedback bad show';
+    fb.textContent = `✗ Yanlış — doğru cevap: ${['A','B','C','D'][q.answer]}`;
+  }
+  document.getElementById('nextBtn').className = 'next-btn show';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ÇOKLU CEVAP — seç/kaldır
+// ═══════════════════════════════════════════════════════════
+function toggleMulti(idx, btn) {
+  if (answered) return;
+  const letters = ['A','B','C','D'];
+  if (selectedMulti.has(idx)) {
+    selectedMulti.delete(idx);
+    btn.classList.remove('selected');
+    btn.querySelector('.opt-icon').textContent = letters[idx];
+  } else {
+    selectedMulti.add(idx);
+    btn.classList.add('selected');
+    btn.querySelector('.opt-icon').textContent = '✓';
+  }
+  const sub = document.getElementById('submitBtn');
+  if (selectedMulti.size > 0) {
+    sub.style.display = 'block';
+    sub.disabled = false;
+  } else {
+    sub.style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ÇOKLU CEVAP — onayla
+// ═══════════════════════════════════════════════════════════
+function submitMulti() {
+  if (answered || selectedMulti.size === 0) return;
+  answered = true;
+  const q = questions[current];
+  const correctSet = new Set(Array.isArray(q.answer) ? q.answer : [q.answer]);
+  const all = document.querySelectorAll('.option');
+  all.forEach(o => o.classList.add('disabled'));
+  document.getElementById('submitBtn').disabled = true;
+
+  const selected = [...selectedMulti];
+  const wrongSel   = selected.filter(i => !correctSet.has(i));
+  const correctSel = selected.filter(i =>  correctSet.has(i));
+  const missed     = [...correctSet].filter(i => !selectedMulti.has(i));
+
+  selected.forEach(i => all[i].classList.add(correctSet.has(i) ? 'correct' : 'wrong'));
+  missed.forEach(i => all[i].classList.add('missed'));
+
+  const fb = document.getElementById('feedback');
+  stopSfx();
+  if (questions[current].audioOnAnswer) setTimeout(() => playSfx(questions[current].audioOnAnswer, false), 50);
+  if (wrongSel.length === 0 && missed.length === 0) {
+    score++;
+    fb.className = 'feedback ok show';
+    fb.textContent = `✓ Mükemmel! ${correctSet.size} doğru cevabın tamamı seçildi.`;
+  } else if (correctSel.length > 0 && wrongSel.length === 0) {
+    fb.className = 'feedback partial show';
+    fb.textContent = `◑ Neredeyse — ${correctSel.length} / ${correctSet.size} doğruyu buldun.`;
+  } else {
+    fb.className = 'feedback bad show';
+    fb.textContent = `✗ Olmadı — ${wrongSel.length} yanlış seçim. Doğrular yukarıda gösteriliyor.`;
+  }
+  document.getElementById('nextBtn').className = 'next-btn show';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SONRAKİ SORU
+// ═══════════════════════════════════════════════════════════
+function nextQuestion() {
+  stopSfx();
+  current++;
+  if (current >= questions.length) { showResults(); return; }
+  const card = document.getElementById('quizCard');
+  card.classList.add('slide-out');
+  setTimeout(loadQuestion, 340);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SONUÇLAR
+// ═══════════════════════════════════════════════════════════
+function showResults() {
+  document.getElementById('quizCard').classList.remove('show');
+  document.getElementById('quizCard').style.display = 'none';
+  document.getElementById('header').style.display = 'none';
+  const pct = Math.round((score / questions.length) * 100);
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressPct').textContent = '100%';
+
+  let grade, msg, sub, bc;
+  if      (pct >= 90) { grade='emir';         msg='Aferin amınevladı'; bc='mukemmel'; sub="İstisnaî bir performans."; }
+  else if (pct >= 75) { grade='selim';           msg='Araştırmanı öneririm✍️';      bc='cok-iyi';  sub="Selim burayı geçemez gelmesi bile mucizedir"; }
+  else if (pct >= 60) { grade='çağrı';               msg='Mal🐒';      bc='iyi';      sub="Çağrı tier"; }
+  else if (pct >= 40) { grade='asım';              msg='Senin burda ne işin var';   bc='orta';     sub="Sen asım mısın"; }
+  else                { grade='seri çık';   msg='Siktir Git🚪';     bc='zayif';    sub="Gruptan çık"; }
+
+  document.getElementById('gradeBadge').textContent = grade;
+  document.getElementById('gradeBadge').className   = `grade-badge ${bc}`;
+  document.getElementById('gradeMsg').textContent   = msg;
+  document.getElementById('gradeSub').textContent   = sub;
+  document.getElementById('scoreBig').textContent   = score;
+  document.getElementById('scoreTotal').textContent = `/ ${questions.length}`;
+  document.getElementById('statCorrect').textContent = score;
+  document.getElementById('statWrong').textContent   = questions.length - score;
+  document.getElementById('statPct').textContent     = pct + '%';
+  document.getElementById('resultsCard').style.display = 'block';
+
+  setTimeout(() => {
+    const ring = document.getElementById('ringFill');
+    ring.style.strokeDashoffset = 339.3 - (pct/100)*339.3;
+    const cols = { mukemmel:'#22c55e','cok-iyi':'#60a5fa',iyi:'#a78bfa',orta:'#f59e0b',zayif:'#ef4444' };
+    ring.style.stroke = cols[bc];
+  }, 100);
+
+  let n=0; const step=Math.max(1,Math.ceil(score/40));
+  const t = setInterval(()=>{ n=Math.min(n+step,score); document.getElementById('scoreBig').textContent=n; if(n>=score)clearInterval(t); }, 35);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ÇIKIŞ
+// ═══════════════════════════════════════════════════════════
+function quitApp() {
+  if (typeof Neutralino !== 'undefined') {
+    Neutralino.app.exit();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TEKRAR DENE
+// ═══════════════════════════════════════════════════════════
+function retryQuiz() {
+  current=0; score=0; answered=false; selectedMulti.clear();
+  document.getElementById('resultsCard').style.display = 'none';
+  document.getElementById('ringFill').style.strokeDashoffset = 339.3;
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressPct').textContent = '0%';
+  document.getElementById('startCard').style.display = 'block';
+  document.getElementById('header').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('quizCard').classList.remove('show');
+  document.getElementById('quizCard').style.display = '';
+}
+</script>
+<script src="/__neutralino_globals.js"></script>
+<script>
+  if (typeof Neutralino !== 'undefined') {
+    Neutralino.init();
+  }
+</script>
+</body>
+</html>
